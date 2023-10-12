@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+</head>
+<body>
+  <div id="drop-zone" class="drop-zone">
+    <p>Drag and drop a CSV file here or click to choose one</p>
+    <input type="file" id="csvFile" accept=".csv" style="display: none;">
+  </div>
+  <div id="choosefilebutton" style="text-align: center;">
+    <button id="choose-file" onclick="chooseCSVFile()">Choose File</button>
+  </div>
+  <br>
+  <p>Select columns to import:</p>
+  <div id="column-checkboxes">
+    <!-- Checkboxes will be populated dynamically via JavaScript -->
+  </div>
+  <br><br>
+  <p>Filter Criteria:</p>
+  <input type="text" id="filter-text" placeholder="Enter filter text">
+  <button id="apply-filter" onclick="applyFilter()">Apply Filter</button>
+  <br><br>
+  <p>Import Options:</p>
+  <input type="radio" id="append-option" name="import-option" value="append" checked>
+  <label for="append-option">Append data to current sheet</label><br>
+  <input type="radio" id="new-sheet-option" name="import-option" value="new-sheet">
+  <label for="new-sheet-option">Paste data in a new sheet</label><br>
+  <button id="start-import" onclick="importCSV()" disabled>Start Import</button>
+
+  <script>
+    // Define a variable to store CSV data
+    var csvData;
+
+    // Add event listeners for drag and drop functionality
+    var dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', handleDragOver, false);
+    dropZone.addEventListener('dragleave', handleDragLeave, false);
+    dropZone.addEventListener('drop', handleFileSelect, false);
+
+    // Handle drag over event
+    function handleDragOver(e) {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    }
+
+    // Handle drag leave event
+    function handleDragLeave(e) {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+    }
+
+    // Handle file drop event
+    function handleFileSelect(e) {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files.length > 0) {
+        var file = files[0];
+        if (file.type === 'text/csv') {
+          document.getElementById('csvFile').files = files;
+          populateColumns(file);
+        } else {
+          alert('Please select a valid CSV file.');
+        }
+      }
+    }
+
+    // Function to open file chooser dialog
+    function chooseCSVFile() {
+      document.getElementById('csvFile').click();
+    }
+
+    // Handle file input change event (file selected via file chooser)
+    document.getElementById('csvFile').addEventListener('change', function (event) {
+      var file = event.target.files[0];
+      if (file.type === 'text/csv') {
+        populateColumns(file);
+      } else {
+        alert('Please select a valid CSV file.');
+      }
+    });
+
+    // Function to populate checkboxes for column selection
+    function populateColumns(file) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        csvData = e.target.result;
+        google.script.run.withSuccessHandler(function (columns) {
+          var checkboxesDiv = document.getElementById('column-checkboxes');
+          checkboxesDiv.innerHTML = ''; // Clear existing checkboxes
+          for (var i = 0; i < columns.length; i++) {
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = i;
+            checkbox.id = 'column-' + i;
+            var label = document.createElement('label');
+            label.htmlFor = 'column-' + i;
+            label.appendChild(document.createTextNode(columns[i]));
+            checkboxesDiv.appendChild(checkbox);
+            checkboxesDiv.appendChild(label);
+          }
+          document.getElementById('start-import').disabled = false;
+        }).getCSVColumns(csvData);
+      };
+      reader.readAsText(file);
+    }
+
+    // Function to apply a filter to the data
+    function applyFilter() {
+      var filterText = document.getElementById('filter-text').value;
+      var checkboxes = document.querySelectorAll('input[type=checkbox]:checked');
+      var selectedColumns = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
+      var importOption = document.querySelector('input[name="import-option"]:checked').value;
+
+      // Filter data based on the selected columns and filter text
+      var filteredData = filterData(csvData, selectedColumns, filterText);
+
+      if (filteredData.length > 0) {
+        // Proceed with importing the filtered data based on the import option
+        if (importOption === "clear-option") {
+          clearCurrentSheet();
+        } else if (importOption === "new-sheet-option") {
+          createNewSheet(filteredData, selectedColumns, filterText);
+        } else {
+          google.script.run.importCSV(filteredData, selectedColumns, importOption, filterText);
+        }
+      } else {
+        alert('No matching data found.');
+      }
+    }
+
+    // Function to filter data based on selected columns and filter text
+    function filterData(data, selectedColumns, filterText) {
+      return data.filter(function (row) {
+        return selectedColumns.some(function (colIndex) {
+          var cellValue = row[colIndex].toLowerCase(); // Convert to lowercase for case-insensitive matching
+          return cellValue.includes(filterText.toLowerCase());
+        });
+      });
+    }
+
+    // Function to clear the current sheet
+    function clearCurrentSheet() {
+      google.script.run.clearCurrentSheet();
+    }
+
+    // Function to import CSV data
+    function importCSV() {
+      var filterText = document.getElementById('filter-text').value;
+      var checkboxes = document.querySelectorAll('input[type=checkbox]:checked');
+      var selectedColumns = Array.from(checkboxes).map(checkbox => parseInt(checkbox.value));
+      var importOption = document.querySelector('input[name="import-option"]:checked').value;
+
+      google.script.run.importCSV(csvData, selectedColumns, importOption, filterText);
+    }
+  </script>
+
+  <style>
+    .drop-zone {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .drag-over {
+      background-color: #f0f0f0;
+    }
+  </style>
+</body>
+</html>
